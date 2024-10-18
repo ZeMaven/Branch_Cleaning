@@ -1,0 +1,101 @@
+#!/bin/bash
+
+# Your GitHub Personal Access Token (ensure this is secure)
+PATToken="******"
+
+# GitHub organization or user
+OrgName="MTNNigeria"
+
+# GitHub API base URL
+BASE_URL="https://api.github.com"
+
+# Time threshold for stale branches (6 months)
+THRESHOLD_DAYS=180
+THRESHOLD_SECONDS=$((THRESHOLD_DAYS * 24 * 60 * 60))
+
+# Current date in epoch (seconds)
+CURRENT_DATE=$(date +%s)
+
+# File containing the list of repositories
+REPOS_FILE="repos.txt"
+
+# Output file for stale branches
+OUTPUT_FILE="stale_branches.csv"
+
+# Function to calculate if a branch is stale
+is_stale() {
+    LAST_COMMIT_DATE=$1
+
+    # Ensure the last commit date is not empty
+    if [ -z "$LAST_COMMIT_DATE" ]; then
+        echo "Error: Last commit date is empty for this branch"
+        return 1  # Treat as non-stale if no date is available
+    fi
+
+    # Debugging: Print the last commit date
+    echo "Debug: Last commit date: $LAST_COMMIT_DATE"
+
+    LAST_COMMIT_EPOCH=$(date -d "$LAST_COMMIT_DATE" +%s 2>/dev/null)
+
+    # Check if LAST_COMMIT_EPOCH is valid
+    if [ -z "$LAST_COMMIT_EPOCH" ]; then
+        echo "Error: Unable to parse last commit date: $LAST_COMMIT_DATE"
+        return 1  # Treat as non-stale if the date cannot be parsed
+    fi
+
+    DIFF=$((CURRENT_DATE - LAST_COMMIT_EPOCH))
+
+    if [ "$DIFF" -ge "$THRESHOLD_SECONDS" ]; then
+        return 0  # Stale
+    else
+        return 1  # Active
+    fi
+}
+
+# Write the CSV headers
+echo "Repository,Branch,Last Commit Date" > "$OUTPUT_FILE"
+
+# Loop through each repository in the file
+while IFS= read -r REPO_NAME; do
+    echo "Checking repository: $REPO_NAME"
+
+    # Fetch branches for the repository
+    BRANCHES=$(curl -s -H "Authorization: token $PATToken" \
+        "$BASE_URL/repos/$OrgName/$REPO_NAME/branches")
+
+    # Check if the request was successful
+    if [ "$(echo "$BRANCHES" | jq '. | length')" -eq 0 ]; then
+        echo "Error: No branches found for repository $REPO_NAME or invalid token/permissions."
+        continue
+    fi
+
+    # Loop through each branch
+    for branch in $(echo "$BRANCHES" | jq -r '.[] | @base64'); do
+        _jq() {
+            echo "$branch" | base64 --decode | jq -r "$1"
+        }
+
+        BRANCH_NAME=$(_jq '.name')
+        LAST_COMMIT_URL=$(_jq '.commit.url')
+
+        # Fetch the last commit date
+        LAST_COMMIT_DATE=$(curl -s -H "Authorization: token $PATToken" "$LAST_COMMIT_URL" | jq -r '.commit.committer.date')
+
+        # Debugging: Check if LAST_COMMIT_DATE is fetched correctly
+        if [ -z "$LAST_COMMIT_DATE" ]; then
+            echo "Error: Unable to fetch the last commit date for branch $BRANCH_NAME in repository $REPO_NAME"
+            continue
+        fi
+
+        # Check if the branch is stale
+        if is_stale "$LAST_COMMIT_DATE"; then
+            echo "Stale branch: $BRANCH_NAME (Last commit: $LAST_COMMIT_DATE)"
+            echo "$REPO_NAME,$BRANCH_NAME,$LAST_COMMIT_DATE" >> "$OUTPUT_FILE"
+        else
+            echo "Branch $BRANCH_NAME is active."
+        fi
+    done
+
+done < "$REPOS_FILE"
+
+echo "Stale branches have been listed in $OUTPUT_FILE."

@@ -1,0 +1,76 @@
+#!/bin/bash
+
+# Your GitHub Personal Access Token (ensure this is secure)
+PATToken="******"
+
+# GitHub organization or user
+OrgName="MTNNigeria"
+
+# Path to the file containing the list of repositories
+REPOS_FILE="repo_file.txt"
+
+# CSV output file
+OUTPUT_CSV="inactive_repos.csv"
+
+# GitHub API base URL
+BASE_URL="https://api.github.com"
+
+# Get the current date in ISO format
+CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Time threshold for 6 months (in seconds)
+THRESHOLD=$((3 * 24 * 60 * 60))
+
+# Initialize the CSV file and add the header
+echo "Repository Name,Last Pushed At,Status" > "$OUTPUT_CSV"
+
+# Function to calculate the difference between two dates
+is_inactive() {
+    LAST_PUSH_DATE=$1
+    LAST_PUSH_EPOCH=$(date -d "$LAST_PUSH_DATE" +%s)
+    CURRENT_EPOCH=$(date -d "$CURRENT_DATE" +%s)
+    DIFF=$((CURRENT_EPOCH - LAST_PUSH_EPOCH))
+
+    if [ $DIFF -ge $THRESHOLD ]; then
+        return 0  # Inactive
+    else
+        return 1  # Active
+    fi
+}
+
+# Function to process each repository
+check_repository() {
+    REPO_NAME=$1
+    REPO_URL="$BASE_URL/repos/$OrgName/$REPO_NAME"
+    
+    # Fetch repository details from GitHub API
+    REPO_DATA=$(curl -s -H "Authorization: token $PATToken" "$REPO_URL")
+    
+    # Extract last push date using jq
+    LAST_PUSH_DATE=$(echo "$REPO_DATA" | jq -r '.pushed_at')
+
+    if [ "$LAST_PUSH_DATE" == "null" ]; then
+        echo "$REPO_NAME has no push activity (possibly empty or new)."
+        echo "$REPO_NAME,null,No Push Activity" >> "$OUTPUT_CSV"
+        return
+    fi
+
+    # Check if the repository has been inactive for more than 6 months
+    if is_inactive "$LAST_PUSH_DATE"; then
+        echo "$REPO_NAME is inactive (last pushed at $LAST_PUSH_DATE)."
+        echo "$REPO_NAME,$LAST_PUSH_DATE,Inactive" >> "$OUTPUT_CSV"
+    else
+        echo "$REPO_NAME is active (last pushed at $LAST_PUSH_DATE)."
+        echo "$REPO_NAME,$LAST_PUSH_DATE,Active" >> "$OUTPUT_CSV"
+    fi
+}
+
+# Read repository names from the file and process each repository
+while IFS= read -r REPO_NAME; do
+    # Skip empty lines
+    if [ -n "$REPO_NAME" ]; then
+        check_repository "$REPO_NAME"
+    fi
+done < "$REPOS_FILE"
+
+echo "Processing complete. Results saved to $OUTPUT_CSV"

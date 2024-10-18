@@ -1,0 +1,67 @@
+#!/bin/bash
+
+PATToken="******"
+
+OrgName="MTNNigeria"
+
+REPOS_FILE="repos.txt"
+
+BASE_URL="https://api.github.com"
+
+THRESHOLD=$((8 * 30 * 24 * 60 * 60))
+
+CURRENT_DATE=$(date +%s)
+
+# Function to delete a branch from a repository
+delete_branch() {
+    REPO_NAME=$1
+    BRANCH_NAME=$2
+
+    # Make the DELETE API request to remove the branch
+    curl -s -X DELETE -H "Authorization: token $PATToken" \
+        "$BASE_URL/repos/$OrgName/$REPO_NAME/git/refs/heads/$BRANCH_NAME"
+
+    echo "Deleted branch '$BRANCH_NAME' from repository '$REPO_NAME'."
+}
+
+# Function to process a repository and delete stale branches
+process_repository() {
+    REPO_NAME=$1
+    echo "Processing repository: $REPO_NAME"
+
+    # Fetch all branches in the repository
+    BRANCHES=$(curl -s -H "Authorization: token $PATToken" \
+        "$BASE_URL/repos/$OrgName/$REPO_NAME/branches" | jq -r '.[] | @base64')
+
+    # Loop through each branch
+    for branch in $BRANCHES; do
+        _jq() {
+            echo "$branch" | base64 --decode | jq -r "$1"
+        }
+
+        BRANCH_NAME=$(_jq '.name')
+        LAST_COMMIT_DATE=$(_jq '.commit.commit.author.date')
+
+        # Convert last commit date to epoch time
+        LAST_COMMIT_EPOCH=$(date -d "$LAST_COMMIT_DATE" +%s)
+        DIFF=$((CURRENT_DATE - LAST_COMMIT_EPOCH))
+
+        # Check if the branch is stale (no updates in the last 6 months)
+        if [ $DIFF -ge $THRESHOLD ]; then
+            if [ "$BRANCH_NAME" != "main" ] && [ "$BRANCH_NAME" != "master" ]; then
+                delete_branch "$REPO_NAME" "$BRANCH_NAME"
+            fi
+        else
+            echo "Branch '$BRANCH_NAME' in '$REPO_NAME' is active."
+        fi
+    done
+}
+
+# Loop through each repository in the list
+while IFS= read -r REPO_NAME; do
+    if [ -n "$REPO_NAME" ]; then
+        process_repository "$REPO_NAME"
+    fi
+done < "$REPOS_FILE"
+
+echo "Finished processing all repositories."

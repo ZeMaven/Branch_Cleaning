@@ -1,0 +1,35 @@
+#!/bin/bash
+
+PATToken="******"
+OrgName="MTNNigeria"
+REPOS_FILE="repositories.txt"
+BASE_URL="https://api.github.com"
+
+# Initialize the page number and a flag to indicate if more pages are available
+PAGE=1
+MORE_PAGES=true
+
+# Clear the repositories file if it exists
+> "$REPOS_FILE"
+
+while $MORE_PAGES; do
+    echo "Fetching page $PAGE of repositories..."
+
+    # Fetch repositories from the current page
+    REPOS=$(curl -s -H "Authorization: token $PATToken" \
+        "$BASE_URL/orgs/$OrgName/repos?per_page=100&page=$PAGE")
+
+    # Check if the response contains repositories (and handle errors)
+    if [ -z "$REPOS" ] || echo "$REPOS" | jq -e '.[0] | length == 0' >/dev/null; then
+        echo "No more repositories found"
+        MORE_PAGES=false
+    else
+        # Append the repositories from this page to the file
+        echo "$REPOS" | jq -r '.[].name' >> "$REPOS_FILE"
+        
+        # Move to the next page
+        PAGE=$((PAGE + 1))
+    fi
+done
+
+echo "All repositories fetched and saved in $REPOS_FILE."

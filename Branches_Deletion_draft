@@ -1,0 +1,14 @@
+#!/bin/bash
+
+PATToken="*******"
+OrgName="MTNNigeria"
+BASE_URL="https://api.github.com"
+
+# Number of pages of repos you have
+$NumberOfPages = 10;
+
+# Fetch all repositories from the organization
+REPOS=$(curl -s -H "Authorization: token $PATToken" $BASE_URL/orgs/$OrgName/repos?per_page=$_ | jq -r '.[].name')
+
+echo "List of repositories in $OrgName:"
+echo "$REPOS"

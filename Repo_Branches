@@ -1,0 +1,56 @@
+# Your GitHub organisation/owner
+$OrgName = "<Your organisation here>";
+
+# Your GitHub PAT token
+$PATToken = "<Your PAT token here>";
+
+# Number of pages of repos you have
+$NumberOfPages = 10;
+
+1..$NumberOfPages | %{ 
+  curl -s -H "Accept: application/json" -H "Authorization: Bearer $PATToken" https://api.github.com/orgs/$OrgName/repos?page=$_ | ConvertFrom-Json 
+} | %{ 
+  $Name = $_.name; curl -s -H "Accept: application/json" -H "Authorization: Bearer $PATToken" https://api.github.com/repos/$OrgName/$Name/branches | ConvertFrom-Json | %{ 
+    [PSCustomObject]@{ 
+      RepoName = $Name; 
+      BranchName = $_.name 
+    }
+  }
+}
+
+
+
+
+
+/*
+#!/bin/bash
+
+# Your GitHub organization/owner
+OrgName="MTNNigeria"
+
+# Your GitHub PAT token
+PATToken="*********"
+
+# # Number of pages of repositories you have
+# NumberOfPages=10
+
+# # File containing the list of repositories
+# REPO_FILE="repo_file.txt"
+
+# # Loop through pages of repositories
+# for page in $(seq 1 $NumberOfPages); do
+#   # Get the repositories for the current page
+#   repos=$(curl -s -H "Accept: application/json" -H "Authorization: Bearer $PATToken" "https://api.github.com/orgs/$OrgName/repos?page=$page")
+
+#   # Loop through each repository
+#   echo "$repos" | jq -r '.[].name' | while read -r repoName; do
+#     # Get the branches for the current repository
+#     branches=$(curl -s -H "Accept: application/json" -H "Authorization: Bearer $PATToken" "https://api.github.com/repos/$OrgName/$repoName/branches")
+
+#     # Loop through each branch and output repository and branch name
+#     echo "$branches" | jq -r '.[] | "\($repoName) \(.name)"' | while read -r repo branch; do
+#       echo "RepoName: $repo, BranchName: $branch"
+#     done
+#   done
+# done
+*/

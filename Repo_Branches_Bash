@@ -1,0 +1,30 @@
+#!/bin/bash
+
+OrgName="MTNNigeria"
+
+PATToken="******"
+
+RepoFile="repo_file.txt"
+
+OutputFile="repo_branches.csv"
+
+echo "Repository,Branch" > "$OutputFile"
+
+# Read the file line by line
+while IFS= read -r repoName || [[ -n "$repoName" ]]; do
+  # Trim whitespace from the repo name
+  repoName=$(echo "$repoName" | xargs)
+
+  # Fetch branches for the current repository
+  branches=$(curl -s -H "Accept: application/json" -H "Authorization: Bearer $PATToken" "https://api.github.com/repos/$OrgName/$repoName/branches")
+
+  # Check if the response contains branches (i.e., if the repository exists)
+  if [[ $(echo "$branches" | jq '. | length') -gt 0 ]]; then
+    # Loop through each branch and add to the CSV file
+    echo "$branches" | jq -r ".[] | \"$repoName,\(.name)\"" >> "$OutputFile"
+  else
+    echo "$repoName,No branches or repo not found" >> "$OutputFile"
+  fi
+done < "$RepoFile"
+
+echo "Branches have been written to $OutputFile"

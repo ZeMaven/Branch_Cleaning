@@ -1,0 +1,84 @@
+#!/bin/bash
+
+# Your GitHub Personal Access Token (ensure this is secure)
+PATToken="*******"
+
+# GitHub organization or user
+OrgName="MTNNigeria"
+
+# GitHub API base URL
+BASE_URL="https://api.github.com"
+
+# Get the current date in ISO format
+CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Time threshold for 6 months (in seconds)
+THRESHOLD=$((6 * 30 * 24 * 60 * 60))
+
+# Function to calculate the difference between two dates
+is_inactive() {
+    LAST_PUSH_DATE=$1
+    LAST_PUSH_EPOCH=$(date -d "$LAST_PUSH_DATE" +%s)
+    CURRENT_EPOCH=$(date -d "$CURRENT_DATE" +%s)
+    DIFF=$((CURRENT_EPOCH - LAST_PUSH_EPOCH))
+
+    if [ $DIFF -ge $THRESHOLD ]; then
+        return 0  # Inactive
+    else
+        return 1  # Active
+    fi
+}
+
+# Loop through repositories and check their last activity
+check_inactive_repos() {
+    PAGE=1
+    INACTIVE_REPOS=()
+
+    while true; do
+        # Fetch repositories in paginated manner
+        REPOS=$(curl -s -H "Authorization: token $PATToken" "$BASE_URL/orgs/$OrgName/repos?per_page=100&page=$PAGE")
+
+        # Break the loop if no more repositories are returned
+        if [ "$(echo "$REPOS" | jq '. | length')" -eq 0 ]; then
+            break
+        fi
+
+        # Loop through each repository and check the pushed_at date
+        for repo in $(echo "$REPOS" | jq -r '.[] | @base64'); do
+            _jq() {
+                echo "$repo" | base64 --decode | jq -r "$1"
+            }
+
+            REPO_NAME=$(_jq '.name')
+            LAST_PUSH_DATE=$(_jq '.pushed_at')
+
+            if [ "$LAST_PUSH_DATE" == "null" ]; then
+                echo "Repository '$REPO_NAME' has no push activity (possibly empty or new)."
+                continue
+            fi
+
+            # Check if the repository has been inactive for more than 6 months
+            if is_inactive "$LAST_PUSH_DATE"; then
+                echo "Repository '$REPO_NAME' is inactive (last pushed at $LAST_PUSH_DATE)."
+                INACTIVE_REPOS+=("$REPO_NAME")
+            else
+                echo "Repository '$REPO_NAME' is active."
+            fi
+        done
+
+        PAGE=$((PAGE + 1))  # Increment the page number for pagination
+    done
+
+    # List inactive repositories
+    if [ ${#INACTIVE_REPOS[@]} -gt 0 ]; then
+        echo -e "\nInactive Repositories (more than 6 months):"
+        for repo in "${INACTIVE_REPOS[@]}"; do
+            echo "$repo"
+        done
+    else
+        echo -e "\nNo inactive repositories found."
+    fi
+}
+
+# Start checking for inactive repositories
+check_inactive_repos

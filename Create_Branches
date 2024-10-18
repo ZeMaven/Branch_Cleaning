@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# Set up the branch names
+MAIN_BRANCH="main"
+STAGING_BRANCH="stage"
+DEVELOPMENT_BRANCH="dev"
+RELEASE_BRANCH="releases"
+FEATURE_BRANCH="feature/new-feature"
+
+# Your GitHub organization/owner
+OrgName="MTNNigeria"
+
+PATToken="******"
+
+# Path to the repositories file (containing only repo names, e.g., repo1, repo2)
+REPOS_FILE="repos.txt"
+
+# Directory to clone the repositories temporarily
+TEMP_DIR="temp_repos"
+
+# Create a directory to store the cloned repositories
+mkdir -p $TEMP_DIR
+
+# Function to create branches in a repository
+create_branches() {
+    REPO_NAME=$1
+    REPO_URL="https://$PATToken@github.com/$OrgName/$REPO_NAME.git"
+    REPO_DIR="$TEMP_DIR/$REPO_NAME"
+
+    echo "Processing repository: $REPO_NAME"
+
+    # Clone the repository using the PAT for authentication
+    git clone "$REPO_URL" "$REPO_DIR"
+    
+    # Check if the clone was successful
+    if [ ! -d "$REPO_DIR" ]; then
+        echo "Failed to clone repository: $REPO_NAME"
+        exit 1
+    fi
+
+    # Navigate into the cloned repository
+    cd "$REPO_DIR" || exit
+
+    # Checkout the main branch, or create it if it doesn't exist
+    git checkout "$MAIN_BRANCH" || git checkout -b "$MAIN_BRANCH"
+    git push origin "$MAIN_BRANCH"
+
+    # Create the staging branch
+    git checkout "$STAGING_BRANCH" || git checkout -b "$STAGING_BRANCH"
+    git push origin "$STAGING_BRANCH"
+
+    # Create the development branch
+    git checkout "$DEVELOPMENT_BRANCH" || git checkout -b "$DEVELOPMENT_BRANCH"
+    git push origin "$DEVELOPMENT_BRANCH"
+    
+    # Create the release branch
+    git checkout "$RELEASE_BRANCH" || git checkout -b "$RELEASE_BRANCH"
+    git push origin "$RELEASE_BRANCH"
+
+    # Create the feature branch
+    git checkout "$FEATURE_BRANCH" || git checkout -b "$FEATURE_BRANCH"
+    git push origin "$FEATURE_BRANCH"
+
+    # Go back to the initial directory
+    cd - || exit
+
+    echo "Finished processing repository: $REPO_NAME"
+}
+
+# Loop through each repository name in the file and create branches
+while IFS= read -r REPO_NAME; do
+    # Check if the line is not empty
+    if [ -n "$REPO_NAME" ]; then
+        create_branches "$REPO_NAME"
+    fi
+done < "$REPOS_FILE"
+
+# Clean up the temporary repository folder
+rm -rf "$TEMP_DIR"
+
+echo "All repositories processed."

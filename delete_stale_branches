@@ -1,0 +1,26 @@
+// automatically clicks to the next page and proceeds to delete stale branches in the next page.
+
+async function deleteStaleBranches(delay=500) {     
+    var stale_branches = document.querySelectorAll('[aria-label="Delete branch"]');
+        for (var i = 0; i < stale_branches.length; i++)     {  
+          stale_branches.item(i).click();
+          await new Promise(r => setTimeout(r, delay));     
+        }     
+        const next = document.querySelector('[aria-label="Next Page"]');
+        if(next) {         
+            next.click();
+            setTimeout(() => deleteStaleBranches(500), 500);
+        } 
+}  (() => { deleteStaleBranches(500); })();
+
+
+// To delete the stale branches that is present in the current page only:
+
+async function deleteStaleBranches(delay=500) {     
+    var stale_branches = document.querySelectorAll('[aria-label="Delete branch"]');
+        for (var i = 0; i < stale_branches.length; i++)     {  
+          stale_branches.item(i).click();
+          await new Promise(r => setTimeout(r, delay));     
+        }     
+        
+}  (() => { deleteStaleBranches(500); })();
